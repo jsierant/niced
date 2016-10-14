@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+from sys import argv
+import re
+import subprocess
+from time import sleep
+from os import devnull, listdir, path
+
+rulesDir=argv[1]
+nullStream=open(devnull, 'wb')
+ruleRe=re.compile("(?P<process>[/\w-]+)\s+(?P<prio>[-\+]*\d+)")
+
+class Rule:
+  def __init__(self, process, prio):
+    self.process=process
+    self.prio=prio
+  def __repr__(self):
+    return "proc: %s, prio: %s" % (self.process, self.prio)
+
+
+def parse(fileName):
+  rules=[]
+  for line in open(fileName, "r"):
+    m=ruleRe.match(line)
+    rule=Rule(m.group("process"), m.group("prio"))
+    rules.append(rule)
+    print(str(rule))
+  return rules
+
+def setRules(rules):
+  for rule in rules:
+    try:
+      pids=subprocess.check_output(["pidof", "%s" % rule.process ]).decode('ascii').strip().split(" ")
+      for pid in pids:
+        subprocess.call(["renice", "-n", rule.prio, "-p", pid],
+                        stdout=nullStream,
+                        stderr=nullStream)
+    except subprocess.CalledProcessError: pass
+
+
+rules=[]
+print("Using rules:")
+for rulesConfig in listdir(rulesDir):
+  rules+=parse(path.join(rulesDir,rulesConfig))
+
+while True:
+  setRules(rules)
+  sleep(30)
